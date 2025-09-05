@@ -130,7 +130,8 @@ async function main() {
             console.log(
                 [
                     `Fatal Changes:`,
-                    changes
+                    changes,
+                    ""
                 ].join("\n")
             );
         }
