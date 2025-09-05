@@ -165,6 +165,6 @@
 
     sdlib.Version = Version;
 
-    sdlib.version = new Version("0.0.0").toString();
+    sdlib.version = new Version("0.1.0").toString();
 
 })(sdlib)

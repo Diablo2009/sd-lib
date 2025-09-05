@@ -180,4 +180,4 @@ async function main() {
     }
 }
 
-console.log(sdlib);
+main();
