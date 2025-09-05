@@ -1,0 +1,183 @@
+#! /usr/bin/env node
+
+// Version manager for sd-lib.
+
+let sdlib;
+try {
+    sdlib = require("../lib/sd-lib").sdlib;
+} catch (_) {
+
+    sdlib = {};
+
+    class Version {
+        major;
+        minor;
+        patch;
+
+        constructor(x, y, z) {
+            if (typeof x == "string") {
+                const versionParts = x.split(".").map((v) => {
+                    let n = Number(v);
+
+                    if (Number.isNaN(n))
+                        n = 0;
+
+                    if (n < 0)
+                        n = -n;
+
+                    return n;
+                });
+
+                if (versionParts.length > 3)
+                    throw new Error("The length of a version should not be more than three sections.");
+
+                while (versionParts.length < 3) versionParts.push(0);
+
+                let major = 0, minor = 0, patch = 0;
+
+                for (let i = 0; i < versionParts.length; i++) {
+                    if (Number.isNaN(versionParts[i]) || versionParts[i] < 0)
+                        throw new Error("The value of a version section should be a valid, positive number.");
+
+                    if (i == 0)
+                        major = versionParts[i];
+                    else if (i == 1)
+                        minor = versionParts[i];
+                    else
+                        patch = versionParts[i];
+                }
+
+                this.major = major;
+                this.minor = minor;
+                this.patch = patch;
+            } else if (typeof x == "number") {
+                if (x < 0 || Number.isNaN(x))
+                    throw new Error("The value of a version section should be a valid, positive number.");
+
+                if (y && typeof y == "number") {
+                    if (y < 0 || Number.isNaN(y))
+                        throw new Error("The value of a version section should be a valid, positive number.");
+
+                    this.minor = y;
+
+                    if (z && typeof z == "number") {
+                        if (z < 0 || Number.isNaN(z))
+                            throw new Error("The value of a version section should be a valid, positive number.");
+
+                        this.patch = z;
+                    }
+                }
+                
+                this.major = x;
+            } else {
+                this.major = 0;
+                this.minor = 0;
+                this.patch = 0;
+            }
+        }
+
+        toString() {
+            return `${this.major}.${this.minor}.${this.patch}`;
+        }
+
+        [require("node:util").inspect.custom]() {
+            return this.toString();
+        }
+
+        static isNew(current, old) {
+            if (!(current instanceof Version))
+                throw new TypeError(`The type of 'current' is ${getType(current)}, expected sdlib.Version.`);
+            if (!(old instanceof Version))
+                throw new TypeError(`The type of 'old' is ${getType(old)}, expected sdlib.Version.`);
+        
+            if (current.major > old.major) return true;
+            if (current.major < old.major) return false;
+
+            if (current.minor > old.minor) return true;
+            if (current.minor < old.minor) return false;
+
+            if (current.patch > old.patch) return true;
+            if (current.patch < old.patch) return false;
+
+            return false; // same version
+        }
+    }
+
+    sdlib.Version = Version;
+    sdlib.version = new Version("0.0.0").toString();
+}
+const path = require("node:path");
+
+const HTTP = path.join("https://raw.githubusercontent.com/Diablo2009/sd-lib/refs/heads/main");
+
+const VERSION_HTTP = path.join(HTTP, "VERSION");
+const VERSION_NOTICE_HTTP = path.join(HTTP, "VERSION_NOTICE.json");
+
+async function main() {
+    const text = await (await fetch(VERSION_HTTP)).text();
+    // const json = await (await fetch(VERSION_NOTICE_HTTP)).json();
+
+    const current = new sdlib.Version(sdlib.version);
+    const upstream = new sdlib.Version(text);
+
+    if (sdlib.Version.isNew(upstream, current)) {
+        // If upstream is newer than the current version.
+        const json = await (await fetch(VERSION_NOTICE_HTTP)).json();
+
+        if (("fatal_changes" in json) && typeof json["fatal_changes"] == "string") {
+            const changes = json["fatal_changes"];
+
+            console.log(
+                [
+                    `Fatal Changes:`,
+                    changes
+                ].join("\n")
+            );
+        }
+
+        const HOME = process.env.HOME || "/home/deck";
+
+        const installLocations = {
+            bin: {
+                sd: path.join(HOME, ".local", "bin", "sd")
+            },
+            lib: {
+                "sd-lib.d.ts": path.join(HOME, ".local", "lib", "sd-lib.d.ts"),
+                "sd-lib.js": path.join(HOME, ".local", "lib", "sd-lib.js")
+            },
+            share: {
+                "sd-lib": {
+                    "sd-lib.js": path.join(HOME, ".local", "share", "sd-lib", "sd-lib.js")
+                }
+            }
+        };
+
+        const sdH = path.join(HTTP, "bin", "sd");
+        const sdlDeclH = path.join(HTTP, "lib", "sd-lib.d.ts");
+        const sdlAH = path.join(HTTP, "lib", "sd-lib.js");
+        const sdlBH = path.join(HTTP, "share", "sd-lib", "sd-lib.js");
+
+        /** @param {string} hPath @param {string} fPath  */
+        async function run(hPath, fPath) {
+
+            const results = await (await fetch(hPath)).text();
+            require("node:fs").writeFileSync(fPath, results, "utf-8");
+        }
+
+        // Order:
+        // - share/sd-lib/sd-lib.js
+        // - lib/sd-lib.js
+        // - lib/sd-lib.d.ts
+        // - bin/sd
+
+        await run(sdlBH, installLocations.share["sd-lib"]["sd-lib.js"]);
+        await run(sdlAH, installLocations.lib["sd-lib.js"]);
+        await run(sdlDeclH, installLocations.lib["sd-lib.d.ts"]);
+        await run(sdH, installLocations.bin.sd);
+    } else {
+        console.log("No New Version Found, exiting...");
+        process.exit(0);
+    }
+}
+
+console.log(sdlib);
