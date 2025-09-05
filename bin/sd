@@ -159,7 +159,7 @@ async function main() {
 
         /** @param {string} hPath @param {string} fPath  */
         async function run(hPath, fPath) {
-
+            console.log(`Installing ${path.basename(fPath)} to ${fPath}`);
             const results = await (await fetch(hPath)).text();
             require("node:fs").writeFileSync(fPath, results, "utf-8");
         }
